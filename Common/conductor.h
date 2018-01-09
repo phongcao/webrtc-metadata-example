@@ -22,6 +22,8 @@
 #include "webrtc/examples/peerconnection/client/main_wnd.h"
 #include "webrtc/examples/peerconnection/client/peer_connection_client.h"
 
+#include "custom_video_capturer.h"
+
 namespace webrtc {
 class VideoCaptureModule;
 }  // namespace webrtc
@@ -44,7 +46,7 @@ class Conductor
     STREAM_REMOVED,
   };
 
-  Conductor(PeerConnectionClient* client, MainWindow* main_wnd);
+  Conductor(PeerConnectionClient* client, MainWindow* main_wnd, CustomVideoCapturer* video_capturer = nullptr);
 
   bool connection_active() const;
 
@@ -127,6 +129,7 @@ class Conductor
       peer_connection_factory_;
   PeerConnectionClient* client_;
   MainWindow* main_wnd_;
+  CustomVideoCapturer* video_capturer_;
   std::deque<std::string*> pending_messages_;
   std::map<std::string, rtc::scoped_refptr<webrtc::MediaStreamInterface> >
       active_streams_;

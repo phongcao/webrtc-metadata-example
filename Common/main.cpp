@@ -11,6 +11,9 @@
 #include "stdafx.h"
 
 #include "webrtc.h"
+#ifdef SENDER_APP
+#include "custom_video_capturer.h"
+#endif // SENDER_APP
 
 // Required app libs
 #pragma comment(lib, "d3dcompiler.lib")
@@ -54,8 +57,19 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
 
   rtc::InitializeSSL();
   PeerConnectionClient client;
+
+#ifdef SENDER_APP
+  // Creates and initializes the custom video capturer.
+  // Note: Conductor is responsible for cleaning up the capturer object.
+  std::shared_ptr<CustomVideoCapturer> capturer = std::shared_ptr<CustomVideoCapturer>(
+	  new CustomVideoCapturer());
+
   rtc::scoped_refptr<Conductor> conductor(
-        new rtc::RefCountedObject<Conductor>(&client, &wnd));
+        new rtc::RefCountedObject<Conductor>(&client, &wnd, capturer.get()));
+#else // SENDER_APP
+  rtc::scoped_refptr<Conductor> conductor(
+    new rtc::RefCountedObject<Conductor>(&client, &wnd));
+#endif // SENDER_APP
 
   // Main loop.
   MSG msg;

@@ -171,6 +171,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\Common\custom_video_capturer.h" />
     <ClInclude Include="..\Common\conductor.h" />
     <ClInclude Include="..\Common\defaults.h" />
     <ClInclude Include="..\Common\flagdefs.h" />
@@ -181,6 +182,7 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\Common\custom_video_capturer.cpp" />
     <ClCompile Include="..\Common\conductor.cpp" />
     <ClCompile Include="..\Common\defaults.cpp" />
     <ClCompile Include="..\Common\main.cpp" />

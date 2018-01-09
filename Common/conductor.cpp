@@ -10,7 +10,7 @@
 
 #include "stdafx.h"
 
-#include "webrtc/examples/peerconnection/client/conductor.h"
+#include "conductor.h"
 
 #include <memory>
 #include <utility>
@@ -23,6 +23,9 @@
 #include "webrtc/examples/peerconnection/client/defaults.h"
 #include "webrtc/media/engine/webrtcvideocapturerfactory.h"
 #include "webrtc/modules/video_capture/video_capture_factory.h"
+#ifndef SENDER_APP
+#include "webrtc/media/base/fakevideocapturer.h"
+#endif // SENDER_APP
 
 // Names used for a IceCandidate JSON object.
 const char kCandidateSdpMidName[] = "sdpMid";
@@ -55,11 +58,12 @@ class DummySetSessionDescriptionObserver
   ~DummySetSessionDescriptionObserver() {}
 };
 
-Conductor::Conductor(PeerConnectionClient* client, MainWindow* main_wnd)
+Conductor::Conductor(PeerConnectionClient* client, MainWindow* main_wnd, CustomVideoCapturer* video_capturer)
   : peer_id_(-1),
     loopback_(false),
     client_(client),
-    main_wnd_(main_wnd) {
+    main_wnd_(main_wnd),
+	video_capturer_(video_capturer) {
   client_->RegisterObserver(this);
   main_wnd->RegisterObserver(this);
 }
@@ -369,33 +373,39 @@ void Conductor::ConnectToPeer(int peer_id) {
 }
 
 std::unique_ptr<cricket::VideoCapturer> Conductor::OpenVideoCaptureDevice() {
-  std::vector<std::string> device_names;
-  {
-    std::unique_ptr<webrtc::VideoCaptureModule::DeviceInfo> info(
+	if (video_capturer_ != nullptr) {
+    std::unique_ptr<cricket::VideoCapturer> capturer(video_capturer_);
+    return capturer;
+  }
+  else {
+    std::vector<std::string> device_names;
+    {
+      std::unique_ptr<webrtc::VideoCaptureModule::DeviceInfo> info(
         webrtc::VideoCaptureFactory::CreateDeviceInfo());
-    if (!info) {
-      return nullptr;
-    }
-    int num_devices = info->NumberOfDevices();
-    for (int i = 0; i < num_devices; ++i) {
-      const uint32_t kSize = 256;
-      char name[kSize] = {0};
-      char id[kSize] = {0};
-      if (info->GetDeviceName(i, name, kSize, id, kSize) != -1) {
-        device_names.push_back(name);
+      if (!info) {
+        return nullptr;
+      }
+      int num_devices = info->NumberOfDevices();
+      for (int i = 0; i < num_devices; ++i) {
+        const uint32_t kSize = 256;
+        char name[kSize] = { 0 };
+        char id[kSize] = { 0 };
+        if (info->GetDeviceName(i, name, kSize, id, kSize) != -1) {
+          device_names.push_back(name);
+        }
       }
     }
-  }
 
-  cricket::WebRtcVideoDeviceCapturerFactory factory;
-  std::unique_ptr<cricket::VideoCapturer> capturer;
-  for (const auto& name : device_names) {
-    capturer = factory.Create(cricket::Device(name, 0));
-    if (capturer) {
-      break;
+    cricket::WebRtcVideoDeviceCapturerFactory factory;
+    std::unique_ptr<cricket::VideoCapturer> capturer;
+    for (const auto& name : device_names) {
+      capturer = factory.Create(cricket::Device(name, 0));
+      if (capturer) {
+        break;
+      }
     }
+    return capturer;
   }
-  return capturer;
 }
 
 void Conductor::AddStreams() {
@@ -406,11 +416,22 @@ void Conductor::AddStreams() {
       peer_connection_factory_->CreateAudioTrack(
           kAudioLabel, peer_connection_factory_->CreateAudioSource(NULL)));
 
+#ifdef SENDER_APP
   rtc::scoped_refptr<webrtc::VideoTrackInterface> video_track(
       peer_connection_factory_->CreateVideoTrack(
           kVideoLabel,
           peer_connection_factory_->CreateVideoSource(OpenVideoCaptureDevice(),
                                                       NULL)));
+#else // SENDER_APP
+  rtc::scoped_refptr<webrtc::VideoTrackInterface> video_track(
+    peer_connection_factory_->CreateVideoTrack(
+      kVideoLabel,
+      peer_connection_factory_->CreateVideoSource(
+        std::unique_ptr<cricket::VideoCapturer>(
+          new cricket::FakeVideoCapturer(false)),
+        NULL)));
+#endif // SENDER_APP
+
   main_wnd_->StartLocalRenderer(video_track);
 
   rtc::scoped_refptr<webrtc::MediaStreamInterface> stream =
