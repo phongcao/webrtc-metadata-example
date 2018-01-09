@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+# WebRTC checkout
+webrtc
+depot_tools.zip
