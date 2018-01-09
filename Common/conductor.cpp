@@ -412,9 +412,11 @@ void Conductor::AddStreams() {
   if (active_streams_.find(kStreamLabel) != active_streams_.end())
     return;  // Already added.
 
+#ifndef WEBRTC_NO_AUDIO
   rtc::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
       peer_connection_factory_->CreateAudioTrack(
           kAudioLabel, peer_connection_factory_->CreateAudioSource(NULL)));
+#endif // WEBRTC_NO_AUDIO
 
 #ifdef SENDER_APP
   rtc::scoped_refptr<webrtc::VideoTrackInterface> video_track(
@@ -437,7 +439,10 @@ void Conductor::AddStreams() {
   rtc::scoped_refptr<webrtc::MediaStreamInterface> stream =
       peer_connection_factory_->CreateLocalMediaStream(kStreamLabel);
 
+#ifndef WEBRTC_NO_AUDIO
   stream->AddTrack(audio_track);
+#endif // WEBRTC_NO_AUDIO
+
   stream->AddTrack(video_track);
   if (!peer_connection_->AddStream(stream)) {
     LOG(LS_ERROR) << "Adding stream to PeerConnection failed";
