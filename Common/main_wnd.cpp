@@ -92,9 +92,9 @@ bool MainWnd::Create() {
   ui_thread_id_ = ::GetCurrentThreadId();
   wnd_ = ::CreateWindowExW(WS_EX_OVERLAPPEDWINDOW, kClassName,
 #ifdef SENDER_APP
-    L"Server",
+    L"Sender",
 #else // SENDER_APP
-    L"Client",
+    L"Receiver",
 #endif // SENDER_APP
     WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_VISIBLE,
     CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
