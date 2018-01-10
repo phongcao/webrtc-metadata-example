@@ -90,10 +90,15 @@ bool MainWnd::Create() {
     return false;
 
   ui_thread_id_ = ::GetCurrentThreadId();
-  wnd_ = ::CreateWindowExW(WS_EX_OVERLAPPEDWINDOW, kClassName, L"WebRTC",
-      WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN,
-      CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-      NULL, NULL, GetModuleHandle(NULL), this);
+  wnd_ = ::CreateWindowExW(WS_EX_OVERLAPPEDWINDOW, kClassName,
+#ifdef SENDER_APP
+    L"Server",
+#else // SENDER_APP
+    L"Client",
+#endif // SENDER_APP
+    WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_VISIBLE,
+    CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+    NULL, NULL, GetModuleHandle(NULL), this);
 
   ::SendMessage(wnd_, WM_SETFONT, reinterpret_cast<WPARAM>(GetDefaultFont()),
                 TRUE);

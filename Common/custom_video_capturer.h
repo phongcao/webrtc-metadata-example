@@ -71,7 +71,6 @@ public:
 	sigslot::signal1<CustomVideoCapturer*> SignalDestroyed;
 
 protected:
-	Clock* const clock_;
 	bool running_;
 	rtc::VideoSinkInterface<VideoFrame>* sink_;
 	SinkWantsObserver* sink_wants_observer_;

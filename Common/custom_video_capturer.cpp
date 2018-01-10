@@ -5,7 +5,6 @@
 #include "custom_video_capturer.h"
 
 CustomVideoCapturer::CustomVideoCapturer() :
-	clock_(webrtc::Clock::GetRealTimeClock()),
 	running_(false),
 	sink_(nullptr),
 	sink_wants_observer_(nullptr)

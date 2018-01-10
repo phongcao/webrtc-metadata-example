@@ -30,7 +30,9 @@
 #ifdef SENDER_APP
 using namespace Microsoft::WRL;
 
-const INT                       kMaxFps = 60;
+const INT                       kMaxFps = 30;
+const INT                       kVideoFrameWidth = 1280;
+const INT                       kVideoFrameHeight = 720;
 const WCHAR                     kFontName[] = L"Verdana";
 const FLOAT                     kFontSize = 50;
 
@@ -41,12 +43,12 @@ ComPtr<ID2D1Factory>            d2d_factory;
 ComPtr<IDWriteFactory>          dwrite_factory;
 ComPtr<IDWriteTextFormat>       text_format;
 ComPtr<ID2D1SolidColorBrush>    d2d_brush;
-ComPtr<ID3D11Texture2D>         offscreen_texture;
-ComPtr<ID2D1RenderTarget>       offscreen_render_target;
+ComPtr<ID2D1RenderTarget>       d2d_render_target;
+ComPtr<ID3D11Texture2D>         staging_texture;
 
 WCHAR                           frame_id_text[64] = { 0 };
 
-int                             frame_id = 0;
+INT                             frame_id = 0;
 #endif // SENDER_APP
 
 int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
@@ -82,17 +84,11 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   PeerConnectionClient client;
 
 #ifdef SENDER_APP
-  // Calculates window width and height.
-  RECT rect;
-  GetClientRect(wnd.handle(), &rect);
-  int width = rect.right - rect.left;
-  int height = rect.bottom - rect.top;
-
-  // Creates and initializes the custom video capturer.
-  // Note: Conductor is responsible for cleaning up the capturer object.
+  // Creates custom video capturer.
   std::shared_ptr<CustomVideoCapturer> capturer = std::shared_ptr<CustomVideoCapturer>(
 	  new CustomVideoCapturer());
 
+  // Creates conductor.
   rtc::scoped_refptr<Conductor> conductor(
         new rtc::RefCountedObject<Conductor>(&client, &wnd, capturer.get()));
 
@@ -125,8 +121,8 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   swapchain_desc.SampleDesc.Count = 1; // Disable anti-aliasing
   swapchain_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
   swapchain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-  swapchain_desc.Width = width;
-  swapchain_desc.Height = height;
+  swapchain_desc.Width = kVideoFrameWidth;
+  swapchain_desc.Height = kVideoFrameHeight;
 
   ComPtr<IDXGIDevice1> dxgi_device;
   hr = d3d_device.As(&dxgi_device);
@@ -149,47 +145,39 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
     &swapchain
   );
 
-  // Allocates an offscreen D3D surface for D2D to render our 2D content into.
-  D3D11_TEXTURE2D_DESC tex_desc;
-  tex_desc.ArraySize = 1;
-  tex_desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-  tex_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-  tex_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-  tex_desc.Height = height;
-  tex_desc.Width = width;
-  tex_desc.MipLevels = 1;
-  tex_desc.MiscFlags = 0;
-  tex_desc.SampleDesc.Count = 1;
-  tex_desc.SampleDesc.Quality = 0;
-  tex_desc.Usage = D3D11_USAGE_DEFAULT;
+  _com_util::CheckError(hr);
 
-  hr = d3d_device->CreateTexture2D(&tex_desc, NULL, &offscreen_texture);
+  // Gets a frame buffer in the swap chain.
+  ComPtr<ID3D11Texture2D> frame_buffer;
+  hr = swapchain->GetBuffer(0, IID_PPV_ARGS(&frame_buffer));
   _com_util::CheckError(hr);
 
   // Obtains a DXGI surface.
   ComPtr<IDXGISurface> dxgi_surface;
-  hr = offscreen_texture->QueryInterface(dxgi_surface.GetAddressOf());
+  hr = frame_buffer->QueryInterface(dxgi_surface.GetAddressOf());
   _com_util::CheckError(hr);
 
   // Creates a Direct2D factory.
   hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, d2d_factory.GetAddressOf());
   _com_util::CheckError(hr);
 
-  // Creates a D2D render target which can draw into our offscreen D3D
-  // surface. Given that we use a constant size for the texture, we
-  // fix the DPI at 96.
+  // Creates a Direct2D render target which can draw into the surface in the swap chain.
+  FLOAT dpi_x;
+  FLOAT dpi_y;
+  d2d_factory->GetDesktopDpi(&dpi_x, &dpi_y);
+
   D2D1_RENDER_TARGET_PROPERTIES props =
     D2D1::RenderTargetProperties(
-      D2D1_RENDER_TARGET_TYPE_DEFAULT,
+      D2D1_RENDER_TARGET_TYPE_HARDWARE,
       D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_PREMULTIPLIED),
-      96,
-      96
+      dpi_x,
+      dpi_y
     );
 
   hr = d2d_factory->CreateDxgiSurfaceRenderTarget(
     dxgi_surface.Get(),
     &props,
-    &offscreen_render_target
+    &d2d_render_target
   );
 
   _com_util::CheckError(hr);
@@ -218,11 +206,25 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   _com_util::CheckError(hr);
 
   // Creates a solid color brush.
-  hr = offscreen_render_target->CreateSolidColorBrush(
+  hr = d2d_render_target->CreateSolidColorBrush(
     D2D1::ColorF(D2D1::ColorF::White, 1.0f),
     &d2d_brush
   );
 
+  _com_util::CheckError(hr);
+
+  // Creates a staging texture so that we can read pixel data.
+  D3D11_TEXTURE2D_DESC tex_desc = { 0 };
+  tex_desc.ArraySize = 1;
+  tex_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+  tex_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  tex_desc.Width = kVideoFrameWidth;
+  tex_desc.Height = kVideoFrameHeight;
+  tex_desc.MipLevels = 1;
+  tex_desc.SampleDesc.Count = 1;
+  tex_desc.Usage = D3D11_USAGE_STAGING;
+
+  hr = d3d_device->CreateTexture2D(&tex_desc, NULL, &staging_texture);
   _com_util::CheckError(hr);
 #else // SENDER_APP
   rtc::scoped_refptr<Conductor> conductor(
@@ -247,30 +249,19 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
       if ((conductor->connection_active() || client.is_connected()) && 
         wnd.current_ui() == MainWindow::STREAMING) {
 
-        // Updates tick.
+        // -----------------------------------------
+        // Updates and renders frame buffer.
+        // -----------------------------------------
         ULONGLONG tick = GetTickCount64();
 
-        // Updates offscreen texture.
-        RECT rc;
-        GetClientRect(wnd.handle(), &rc);
-
-        FLOAT dpi_x, dpi_y;
-        FLOAT scale_x, scale_y;
-        d2d_factory->GetDesktopDpi(&dpi_x, &dpi_y);
-        scale_x = 96.0f / dpi_x;
-        scale_y = 96.0f / dpi_y;
-
         D2D1_RECT_F des_rect = {
-          rc.left * scale_x,
-          rc.top * scale_y,
-          rc.right * scale_x,
-          rc.bottom * scale_y
+          0, 0, kVideoFrameWidth, kVideoFrameHeight
         };
 
         wsprintf(frame_id_text, L"%d", ++frame_id);
-        offscreen_render_target->BeginDraw();
-        offscreen_render_target->Clear(D2D1::ColorF(D2D1::ColorF::Black));
-        offscreen_render_target->DrawText(
+        d2d_render_target->BeginDraw();
+        d2d_render_target->Clear(D2D1::ColorF(D2D1::ColorF::Black));
+        d2d_render_target->DrawText(
           frame_id_text,
           ARRAYSIZE(frame_id_text) - 1,
           text_format.Get(),
@@ -278,16 +269,52 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
           d2d_brush.Get()
         );
 
-        offscreen_render_target->EndDraw();
-
-        // Renders offscreen texture.
-        ComPtr<ID3D11Texture2D> frame_buffer;
-        hr = swapchain->GetBuffer(0, IID_PPV_ARGS(&frame_buffer));
-        _com_util::CheckError(hr);
-        d3d_context->CopyResource(frame_buffer.Get(), offscreen_texture.Get());
+        d2d_render_target->EndDraw();
         swapchain->Present(1, 0);
 
+        // -----------------------------------------
+        // Sends video frame via WebRTC.
+        // -----------------------------------------
+        int width = kVideoFrameWidth;
+        int height = kVideoFrameHeight;
+        d3d_context->CopyResource(staging_texture.Get(), frame_buffer.Get());
+        rtc::scoped_refptr<webrtc::I420Buffer> buffer =
+          webrtc::I420Buffer::Create(width, height);
+
+        // Converts texture to supported video format.
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (SUCCEEDED(d3d_context.Get()->Map(
+          staging_texture.Get(), 0, D3D11_MAP_READ, 0, &mapped))) {
+          libyuv::ABGRToI420(
+            (uint8_t*)mapped.pData,
+            width * 4,
+            buffer.get()->MutableDataY(),
+            buffer.get()->StrideY(),
+            buffer.get()->MutableDataU(),
+            buffer.get()->StrideU(),
+            buffer.get()->MutableDataV(),
+            buffer.get()->StrideV(),
+            width,
+            height);
+
+          d3d_context->Unmap(staging_texture.Get(), 0);
+        }
+
+        // Updates time stamp.
+        auto time_stamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::system_clock::now().time_since_epoch()).count();
+
+        // Creates video frame buffer.
+        auto frame = webrtc::VideoFrame(buffer, kVideoRotation_0, time_stamp);
+        frame.set_ntp_time_ms(webrtc::Clock::GetRealTimeClock()->CurrentNtpInMilliseconds());
+        frame.set_rotation(VideoRotation::kVideoRotation_0);
+
+        // Sending video frame.
+        capturer->SendFrame(frame);
+
+        // -----------------------------------------
         // FPS limiter.
+        // -----------------------------------------
         const int interval = 1000 / kMaxFps;
         ULONGLONG time_elapsed = GetTickCount64() - tick;
         DWORD sleep_amount = 0;
