@@ -41,8 +41,7 @@ void CustomVideoCapturer::AddOrUpdateSink(
 {
 	rtc::CritScope cs(&lock_);
 	sink_ = sink;
-	if (sink_wants_observer_)
-	{
+	if (sink_wants_observer_) {
 		sink_wants_observer_->OnSinkWantsChanged(sink, wants);
 	}
 }
@@ -72,17 +71,13 @@ void CustomVideoCapturer::RemoveSink(rtc::VideoSinkInterface<VideoFrame>* sink)
 void CustomVideoCapturer::SendFrame(webrtc::VideoFrame video_frame)
 {
 	// The video capturer hasn't started since there is no active connection.
-	if (!running_)
-	{
+	if (!running_) {
 		return;
 	}
 
-	if (sink_)
-	{
+	if (sink_) {
 		sink_->OnFrame(video_frame);
-	}
-	else
-	{
+	} else {
 		OnFrame(video_frame, video_frame.width(), video_frame.height());
 	}
 }
