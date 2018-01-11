@@ -30,11 +30,11 @@
 #ifdef SENDER_APP
 using namespace Microsoft::WRL;
 
-const INT                       kMaxFps = 30;
+const INT                       kMaxFps = 60;
 const INT                       kVideoFrameWidth = 1280;
 const INT                       kVideoFrameHeight = 720;
 const WCHAR                     kFontName[] = L"Verdana";
-const FLOAT                     kFontSize = 50;
+const FLOAT                     kFontSize = 100;
 
 ComPtr<ID3D11Device>            d3d_device;
 ComPtr<ID3D11DeviceContext>     d3d_context;
@@ -46,9 +46,9 @@ ComPtr<ID2D1SolidColorBrush>    d2d_brush;
 ComPtr<ID2D1RenderTarget>       d2d_render_target;
 ComPtr<ID3D11Texture2D>         staging_texture;
 
-WCHAR                           frame_id_text[64] = { 0 };
+WCHAR                           metadata_id_text[64] = { 0 };
 
-INT                             frame_id = 0;
+INT                             metadata_id = 0;
 #endif // SENDER_APP
 
 int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
@@ -253,24 +253,25 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
         // Updates and renders frame buffer.
         // -----------------------------------------
         ULONGLONG tick = GetTickCount64();
-
-        D2D1_RECT_F des_rect = {
-          0, 0, kVideoFrameWidth, kVideoFrameHeight
+        D2D1_RECT_F des_rect = { 
+          kVideoFrameWidth / 2 - kFontSize,
+          kVideoFrameHeight / 2 - kFontSize,
+          kVideoFrameWidth,
+          kVideoFrameHeight
         };
 
-        wsprintf(frame_id_text, L"%d", ++frame_id);
+        wsprintf(metadata_id_text, L"%d", ++metadata_id);
         d2d_render_target->BeginDraw();
         d2d_render_target->Clear(D2D1::ColorF(D2D1::ColorF::Black));
         d2d_render_target->DrawText(
-          frame_id_text,
-          ARRAYSIZE(frame_id_text) - 1,
+          metadata_id_text,
+          ARRAYSIZE(metadata_id_text) - 1,
           text_format.Get(),
           des_rect,
           d2d_brush.Get()
         );
 
         d2d_render_target->EndDraw();
-        swapchain->Present(1, 0);
 
         // -----------------------------------------
         // Sends video frame via WebRTC.
@@ -308,16 +309,18 @@ int PASCAL wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
         auto frame = webrtc::VideoFrame(buffer, kVideoRotation_0, time_stamp);
         frame.set_ntp_time_ms(webrtc::Clock::GetRealTimeClock()->CurrentNtpInMilliseconds());
         frame.set_rotation(VideoRotation::kVideoRotation_0);
+        frame.set_metadata_id(metadata_id);
 
         // Sending video frame.
         capturer->SendFrame(frame);
 
         // -----------------------------------------
-        // FPS limiter.
+        // Present and FPS limiter.
         // -----------------------------------------
         const int interval = 1000 / kMaxFps;
         ULONGLONG time_elapsed = GetTickCount64() - tick;
         DWORD sleep_amount = 0;
+        swapchain->Present(1, 0);
         if (time_elapsed < interval) {
           sleep_amount = interval - time_elapsed;
         }

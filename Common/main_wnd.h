@@ -120,6 +120,7 @@ class MainWnd : public MainWindow {
 
     const BITMAPINFO& bmi() const { return bmi_; }
     const uint8_t* image() const { return image_.get(); }
+    const int metadata_id() const { return metadata_id_; }
 
    protected:
     void SetSize(int width, int height);
@@ -134,6 +135,7 @@ class MainWnd : public MainWindow {
     std::unique_ptr<uint8_t[]> image_;
     CRITICAL_SECTION buffer_lock_;
     rtc::scoped_refptr<webrtc::VideoTrackInterface> rendered_track_;
+    int metadata_id_;
   };
 
   // A little helper class to make sure we always to proper locking and

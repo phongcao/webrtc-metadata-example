@@ -10,16 +10,16 @@
 
 #include "stdafx.h"
 
-#include "webrtc/examples/peerconnection/client/main_wnd.h"
-
 #include <math.h>
 
 #include "libyuv/convert_argb.h"
 #include "webrtc/api/video/i420_buffer.h"
-#include "webrtc/examples/peerconnection/client/defaults.h"
 #include "webrtc/base/arraysize.h"
 #include "webrtc/base/checks.h"
 #include "webrtc/base/logging.h"
+
+#include "defaults.h"
+#include "main_wnd.h"
 
 ATOM MainWnd::wnd_class_ = 0;
 const wchar_t MainWnd::kClassName[] = L"WebRTC_MainWnd";
@@ -289,6 +289,11 @@ void MainWnd::OnPaint() {
 
       BitBlt(ps.hdc, 0, 0, logical_area.x, logical_area.y,
              dc_mem, 0, 0, SRCCOPY);
+
+      // Draw video frame metadata id.
+      char text_buffer[256];
+      sprintf(text_buffer, "Metadata Id: %d", remote_renderer->metadata_id());
+      DrawTextA(ps.hdc, text_buffer, strlen(text_buffer), &logical_rect, 0);
 
       // Cleanup.
       ::SelectObject(dc_mem, bmp_old);
@@ -629,6 +634,9 @@ void MainWnd::VideoRenderer::OnFrame(
                        bmi_.bmiHeader.biWidth *
                            bmi_.bmiHeader.biBitCount / 8,
                        buffer->width(), buffer->height());
+
+    // Read video frame metadata id.
+    metadata_id_ = video_frame.metadata_id();
   }
   InvalidateRect(wnd_, NULL, TRUE);
 }
