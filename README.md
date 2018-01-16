@@ -3,6 +3,10 @@ This example shows how to pass real time metadata synchronized with video frames
 
 ![webrtc-metadata](https://user-images.githubusercontent.com/9741323/34884551-0d8123c8-f78b-11e7-87a0-7c82f6fa160f.JPG)
 
+## Architecture
+
+![webrtc-metadata3](https://user-images.githubusercontent.com/9741323/35011385-e2664c94-fad3-11e7-98ae-7496b7a1176f.JPG)
+
 ## How to build
 
 These steps will ensure your development environment is configured properly, and then they'll walk you through the process of building the code.
